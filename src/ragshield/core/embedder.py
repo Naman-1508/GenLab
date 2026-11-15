@@ -48,7 +48,37 @@ class SentenceTransformerEmbedder(Embedder):
 
         self.model_name = model_name
         self.device = device
-        self.model = SentenceTransformer(model_name, device=device)
+
+        # Check if model exists in local HuggingFace cache snapshots to avoid network timeout
+        resolved_name = model_name
+        try:
+            from pathlib import Path
+            safe_name = model_name.replace("/", "--")
+            cache_snapshots = (
+                Path.home()
+                / ".cache"
+                / "huggingface"
+                / "hub"
+                / f"models--{safe_name}"
+                / "snapshots"
+            )
+            if not cache_snapshots.exists():
+                cache_snapshots = (
+                    Path.home()
+                    / ".cache"
+                    / "huggingface"
+                    / "hub"
+                    / f"models--sentence-transformers--{safe_name}"
+                    / "snapshots"
+                )
+            if cache_snapshots.exists():
+                snaps = list(cache_snapshots.iterdir())
+                if snaps:
+                    resolved_name = str(snaps[0])
+        except Exception:
+            pass
+
+        self.model = SentenceTransformer(resolved_name, device=device)
         self._embedding_dim = self.model.get_sentence_embedding_dimension()
 
     def embed(self, texts: Union[str, List[str]]) -> np.ndarray:

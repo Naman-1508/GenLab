@@ -1,0 +1,6 @@
+Configuration,Precision,Recall,F1_Score,Detection_Rate,TP,FP,TN,FN
+Perplexity Only,0.6667,0.6667,0.6667,66.67,8,4,0,4
+Similarity Only,0.0,0.0,0.0,0.0,0,0,4,12
+Semantic Only,1.0,0.5,0.6667,50.0,6,0,4,6
+Prompt Injection Only,1.0,0.6667,0.8,66.67,8,0,4,4
+Full Hybrid Ensemble (Proposed),1.0,0.9167,0.9565,91.67,11,0,4,1

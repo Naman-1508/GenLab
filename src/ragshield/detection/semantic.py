@@ -1,36 +1,34 @@
-"""Semantic-based poison detection.
+"""Semantic-based poison and instruction consistency detection.
 
-Detects poisoned documents by analyzing semantic consistency and
-identifying potentially malicious content patterns.
+Identifies suspicious semantic behavior within document chunks, including:
+1. Instruction-like content embedded in factual text.
+2. Contradictory statements and factual poisoning attempts.
+3. Behavioral manipulation targeting RAG context retrieval.
+4. Structural and formatting anomalies designed to evade detection.
 """
 
+from dataclasses import dataclass
 import re
-from typing import List, Set, Optional
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 from ragshield.core.document import Document
 from ragshield.detection.base import PoisonDetector, DetectionResult, ThreatLevel
 
 
 class SemanticDetector(PoisonDetector):
-    """Detect poisoned documents based on semantic analysis.
-
-    This detector looks for:
-    1. Instruction injection patterns
-    2. Conflicting/contradictory information
-    3. Suspicious keyword patterns
-    4. Unusual formatting that may indicate adversarial content
+    """Detect poisoned documents based on semantic structure and content patterns.
 
     Args:
-        suspicious_patterns: List of regex patterns to detect
-        instruction_keywords: Keywords indicating instruction injection
-        confidence_threshold: Threshold for flagging as poisoned
+        suspicious_patterns: List of regex patterns to detect.
+        instruction_keywords: Keywords indicating imperative or instruction-like behavior.
+        confidence_threshold: Threshold for flagging as poisoned.
+        case_sensitive: Whether matching should respect case.
     """
 
-    # Default patterns that may indicate poisoning
     DEFAULT_SUSPICIOUS_PATTERNS = [
         # Instruction injection patterns
         r"ignore\s+(all\s+)?previous\s+instructions?",
-        r"disregard\s+(all\s+)?previous",
+        r"disregard\s+(all\s+)?(previous|prior|system|other)\s*(instructions?|sources?|documents?)?",
         r"forget\s+(everything|all)",
         r"new\s+instructions?:",
         r"system\s*:\s*you\s+are",
@@ -47,10 +45,14 @@ class SemanticDetector(PoisonDetector):
         r"show\s+me\s+(?:your\s+)?(?:system\s+)?prompt",
         r"what\s+(?:are|is)\s+your\s+(?:system\s+)?(?:prompt|instructions?)",
         r"output\s+(?:your\s+)?(?:initial|system)\s+(?:prompt|instructions?)",
-        # Base64 encoded content (potential obfuscation)
+        # RAG manipulation patterns
+        r"(?:whenever|when)\s+(?:a\s+user|the\s+user)\s+asks\s+about",
+        r"always\s+(?:respond|answer|reply)\s+that",
+        r"replace\s+(?:the\s+above|all)\s+information\s+with",
+        r"note\s+to\s+(?:the\s+)?(?:ai|llm|assistant|model):",
+        # Obfuscation & Unicode
         r"[A-Za-z0-9+/]{50,}={0,2}",
-        # Unicode manipulation
-        r"[\u200b-\u200f\u2028-\u202f]",  # Zero-width and special unicode
+        r"[\u200b-\u200f\u2028-\u202f]",
     ]
 
     DEFAULT_INSTRUCTION_KEYWORDS = {
@@ -60,7 +62,7 @@ class SemanticDetector(PoisonDetector):
         "override",
         "bypass",
         "jailbreak",
-        "DAN",
+        "dan",
         "pretend",
         "roleplay",
         "system prompt",
@@ -68,13 +70,23 @@ class SemanticDetector(PoisonDetector):
         "reveal",
         "output",
         "print",
+        "assistant note",
+        "override prompt",
     }
+
+    CONTRADICTION_PATTERNS = [
+        (r"(?i)(?:the\s+)?(?:official|correct|true)\s+(?:and\s+official\s+)?(?:answer|creator|inventor|history|facts?)\s+is", "claims authoritative truth override"),
+        (r"(?i)(?:actually|in\s+fact),?\s+(?:the\s+)?(?:real|true)\s+(?:and\s+official\s+)?(?:creator|inventor|answer|facts?)", "claims alternative truth"),
+        (r"(?i)(?:everyone|they|all\s+previous\s+textbooks?)\s+(?:is|are)\s+wrong", "dismisses consensus facts"),
+        (r"(?i)contrary\s+to\s+(?:popular\s+)?belief,?\s+.*\s+(?:was|is)\s+(?:declared|the\s+true|created)", "subverts consensus knowledge"),
+        (r"(?i)(?:disregard|ignore)\s+all\s+(?:other|previous)\s+(?:reference\s+documents|textbooks|sources)", "suppresses corpus facts"),
+    ]
 
     def __init__(
         self,
         suspicious_patterns: Optional[List[str]] = None,
         instruction_keywords: Optional[Set[str]] = None,
-        confidence_threshold: float = 0.5,
+        confidence_threshold: float = 0.50,
         case_sensitive: bool = False,
     ):
         self.suspicious_patterns = suspicious_patterns or self.DEFAULT_SUSPICIOUS_PATTERNS
@@ -82,19 +94,11 @@ class SemanticDetector(PoisonDetector):
         self.confidence_threshold = confidence_threshold
         self.case_sensitive = case_sensitive
 
-        # Compile regex patterns
         flags = 0 if case_sensitive else re.IGNORECASE
         self.compiled_patterns = [re.compile(p, flags) for p in self.suspicious_patterns]
 
-    def _check_patterns(self, text: str) -> List[tuple[str, str]]:
-        """Check text for suspicious patterns.
-
-        Args:
-            text: Text to analyze
-
-        Returns:
-            List of (pattern, matched_text) tuples
-        """
+    def _check_patterns(self, text: str) -> List[Tuple[str, str]]:
+        """Check text for suspicious regex patterns."""
         matches = []
         for pattern, compiled in zip(self.suspicious_patterns, self.compiled_patterns):
             match = compiled.search(text)
@@ -103,14 +107,7 @@ class SemanticDetector(PoisonDetector):
         return matches
 
     def _check_keywords(self, text: str) -> List[str]:
-        """Check text for suspicious keywords.
-
-        Args:
-            text: Text to analyze
-
-        Returns:
-            List of found keywords
-        """
+        """Check text for suspicious keywords."""
         text_lower = text.lower()
         found = []
         for keyword in self.instruction_keywords:
@@ -119,29 +116,18 @@ class SemanticDetector(PoisonDetector):
         return found
 
     def _check_formatting_anomalies(self, text: str) -> List[str]:
-        """Check for unusual formatting that may indicate adversarial content.
-
-        Args:
-            text: Text to analyze
-
-        Returns:
-            List of detected anomalies
-        """
+        """Check for unusual formatting or obfuscation markers."""
         anomalies = []
-
-        # Check for excessive special characters
         special_char_ratio = sum(1 for c in text if not c.isalnum() and not c.isspace()) / (
             len(text) + 1
         )
         if special_char_ratio > 0.3:
             anomalies.append(f"excessive special characters ({special_char_ratio:.1%})")
 
-        # Check for hidden unicode characters
         hidden_unicode = re.findall(r"[\u200b-\u200f\u2028-\u202f\ufeff]", text)
         if hidden_unicode:
             anomalies.append(f"hidden unicode characters ({len(hidden_unicode)} found)")
 
-        # Check for unusual repetition
         words = text.lower().split()
         if len(words) > 5:
             word_counts = {}
@@ -151,7 +137,6 @@ class SemanticDetector(PoisonDetector):
             if max_repeat > len(words) * 0.3:
                 anomalies.append(f"unusual word repetition (max: {max_repeat})")
 
-        # Check for mixed case anomalies (e.g., "iGnOrE InStRuCtIoNs")
         if len(text) > 10:
             case_changes = sum(
                 1
@@ -166,76 +151,59 @@ class SemanticDetector(PoisonDetector):
         return anomalies
 
     def _check_contradictions(self, text: str) -> List[str]:
-        """Check for potentially contradictory or suspicious claims.
-
-        Args:
-            text: Text to analyze
-
-        Returns:
-            List of suspicious claims
-        """
+        """Check for potentially contradictory or suspicious truth claims."""
         suspicious_claims = []
-
-        # Patterns that might indicate false/malicious information
-        contradiction_patterns = [
-            (r"(?:the\s+)?(?:official|correct|true)\s+answer\s+is", "claims to be official answer"),
-            (r"contrary\s+to\s+(?:popular\s+)?belief", "contradicts common knowledge"),
-            (r"(?:actually|in\s+fact),?\s+(?:the\s+)?(?:real|true)", "claims alternative truth"),
-            (r"(?:everyone|they)\s+(?:is|are)\s+wrong", "dismisses other sources"),
-        ]
-
-        for pattern, description in contradiction_patterns:
+        for pattern, description in self.CONTRADICTION_PATTERNS:
             if re.search(pattern, text, re.IGNORECASE):
                 suspicious_claims.append(description)
-
         return suspicious_claims
 
     def detect(self, document: Document) -> DetectionResult:
-        """Detect if document contains poisoned content.
-
-        Args:
-            document: Document to check
-
-        Returns:
-            Detection result
-        """
+        """Analyze semantic consistency and identify suspicious instruction behavior."""
         text = document.content
         findings = []
-        scores = []
+        evidence_spans: List[str] = []
+        component_scores: List[float] = []
 
-        # Check patterns
+        # 1. Regex pattern matches
         pattern_matches = self._check_patterns(text)
         if pattern_matches:
             findings.append(f"suspicious patterns: {len(pattern_matches)} matches")
-            scores.append(min(1.0, len(pattern_matches) * 0.3))
+            component_scores.append(min(1.0, 0.40 + len(pattern_matches) * 0.30))
+            for _, span in pattern_matches:
+                evidence_spans.append(span)
 
-        # Check keywords
+        # 2. Instruction keywords
         keyword_matches = self._check_keywords(text)
         if keyword_matches:
             findings.append(f"suspicious keywords: {', '.join(keyword_matches[:3])}")
-            scores.append(min(1.0, len(keyword_matches) * 0.2))
+            component_scores.append(min(1.0, 0.20 + len(keyword_matches) * 0.15))
+            for kw in keyword_matches[:5]:
+                evidence_spans.append(kw)
 
-        # Check formatting anomalies
+        # 3. Formatting anomalies
         format_anomalies = self._check_formatting_anomalies(text)
         if format_anomalies:
             findings.append(f"formatting anomalies: {'; '.join(format_anomalies)}")
-            scores.append(min(1.0, len(format_anomalies) * 0.25))
+            component_scores.append(min(1.0, len(format_anomalies) * 0.30))
 
-        # Check contradictions
+        # 4. Contradictions & RAG overrides (Targeted Knowledge Poisoning indicator)
         contradictions = self._check_contradictions(text)
         if contradictions:
             findings.append(f"suspicious claims: {'; '.join(contradictions)}")
-            scores.append(min(1.0, len(contradictions) * 0.2))
+            # Strong indicator of factual corruption in RAG documents
+            component_scores.append(min(1.0, 0.50 + len(contradictions) * 0.25))
+            for c in contradictions:
+                evidence_spans.append(c)
 
-        # Calculate overall score
-        if scores:
-            overall_score = sum(scores) / len(scores)
+        if component_scores:
+            # Emphasize highest component score (max pool with average weighting)
+            overall_score = float(0.6 * max(component_scores) + 0.4 * (sum(component_scores) / len(component_scores)))
         else:
             overall_score = 0.0
 
         is_poisoned = overall_score >= self.confidence_threshold
 
-        # Determine confidence and threat level
         if is_poisoned:
             confidence = min(0.95, 0.5 + overall_score * 0.45)
             if overall_score > 0.8:
@@ -248,18 +216,19 @@ class SemanticDetector(PoisonDetector):
             confidence = min(0.95, 0.5 + (self.confidence_threshold - overall_score) * 0.45)
             threat_level = ThreatLevel.NONE
 
-        reason = "; ".join(findings) if findings else "No suspicious patterns detected"
+        reason = "; ".join(findings) if findings else "No suspicious semantic patterns detected"
 
         return DetectionResult(
             is_poisoned=is_poisoned,
             confidence=confidence,
             threat_level=threat_level,
             reason=reason,
-            score=overall_score,
+            score=round(overall_score, 4),
             metadata={
                 "pattern_matches": len(pattern_matches),
                 "keyword_matches": keyword_matches,
                 "format_anomalies": format_anomalies,
                 "contradictions": contradictions,
+                "evidence_spans": evidence_spans[:10],
             },
         )

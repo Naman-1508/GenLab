@@ -64,6 +64,13 @@ from ragshield.defense.shield import (
     create_shield,
 )
 
+# Pre-Ingestion Security Gate
+from ragshield.defense.gate import (
+    PreIngestionSecurityGate,
+    GateIngestionResult,
+    BatchDocumentIngestionReport,
+)
+
 __all__ = [
     # Quarantine
     "QuarantineStatus",
@@ -96,4 +103,8 @@ __all__ = [
     "ShieldStatus",
     "RAGShield",
     "create_shield",
+    # Pre-Ingestion Security Gate
+    "PreIngestionSecurityGate",
+    "GateIngestionResult",
+    "BatchDocumentIngestionReport",
 ]

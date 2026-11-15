@@ -1,0 +1,68 @@
+{
+  "dataset_name": "WikiText-103 Representative Subset",
+  "source": "Salesforce/wikitext (CC BY-SA 3.0)",
+  "purpose": "Benign reference distribution, perplexity calibration, and negative control testing",
+  "samples": [
+    {
+      "id": "wiki_001",
+      "topic": "Valkyrie (comics)",
+      "content": "Valkyrie is a fictional superheroine appearing in American comic books published by Marvel Comics. The character, based on the Norse mythological figure Brynhildr, was created by Roy Thomas and John Buscema.",
+      "split": "train"
+    },
+    {
+      "id": "wiki_002",
+      "topic": "Solar System",
+      "content": "The Solar System is the gravitationally bound system of the Sun and the objects that orbit it. It formed 4.6 billion years ago from the gravitational collapse of a giant interstellar molecular cloud.",
+      "split": "train"
+    },
+    {
+      "id": "wiki_003",
+      "topic": "Photosynthesis",
+      "content": "Photosynthesis is a biological process used by plants and other organisms to convert light energy into chemical energy that, through cellular respiration, can later be released to fuel the organism's activities.",
+      "split": "train"
+    },
+    {
+      "id": "wiki_004",
+      "topic": "James Joyce",
+      "content": "James Augustine Aloysius Joyce was an Irish novelist, short story writer, poet, and literary critic. He contributed to the modernist avant-garde movement and is regarded as one of the most influential writers of the 20th century.",
+      "split": "train"
+    },
+    {
+      "id": "wiki_005",
+      "topic": "Theory of Relativity",
+      "content": "The theory of relativity usually encompasses two interrelated physics theories by Albert Einstein: special relativity and general relativity, proposed in 1905 and 1915 respectively.",
+      "split": "val"
+    },
+    {
+      "id": "wiki_006",
+      "topic": "Computer Architecture",
+      "content": "In computer engineering, computer architecture is a description of the structure of a computer system made from component parts. It can be divided into instruction set architecture, microarchitecture, and system design.",
+      "split": "val"
+    },
+    {
+      "id": "wiki_007",
+      "topic": "Plate Tectonics",
+      "content": "Plate tectonics is the generally accepted scientific theory that considers the Earth's lithosphere to comprise a number of large tectonic plates which have been slowly moving since about 3.4 billion years ago.",
+      "split": "test"
+    },
+    {
+      "id": "wiki_008",
+      "topic": "Great Barrier Reef",
+      "content": "The Great Barrier Reef is the world's largest coral reef system composed of over 2,900 individual reefs and 900 islands stretching for over 2,300 kilometres over an area of approximately 344,400 square kilometres.",
+      "split": "test"
+    },
+    {
+      "id": "wiki_009",
+      "topic": "Quantum Mechanics",
+      "content": "Quantum mechanics is a fundamental theory in physics that describes the physical properties of nature at the scale of atoms and subatomic particles. It is the foundation of all quantum physics.",
+      "split": "test"
+    },
+    {
+      "id": "wiki_010",
+      "topic": "Renewable Energy",
+      "content": "Renewable energy is energy derived from natural resources that replenish themselves in less than a human lifetime without depleting the planet's resources, including solar, wind, and geothermal power.",
+      "split": "test"
+    }
+  ]
+}
+

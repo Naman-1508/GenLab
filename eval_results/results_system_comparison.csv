@@ -1,0 +1,15 @@
+Metric,System A (Vanilla RAG),System B (Hybrid Secure RAG)
+Pre-Ingestion Security Filtering,None (Implicit Trust),4-Detector Hybrid Gate
+Malicious Chunks Ingested into Vector DB,12 / 12 (100.0% Ingested),1 / 12 (8.3% Ingested)
+Quarantine Containment Rate,0.0%,91.7% (11 / 12 Quarantined)
+Retrieval Leakage Incidents (Context Contamination),6 / 7 queries (85.7%),3 / 7 queries (42.9%)
+Confirmed Harmful Answers Generated,5 / 7 queries (71.4%),1 / 7 queries (14.3%)
+Physical Quarantine Breach Count,N/A (No Quarantine),0 breaches (0.0% Leakage)
+Precision,N/A (No Filter),1.0000
+Recall,0.0000,0.9167
+F1-Score,0.0000,0.9565
+False Positive Rate (FPR),0.0%,0.0%
+Avg End-to-End Ingestion Latency / Chunk,9.13 ms,10.38 ms
+Avg End-to-End Query Latency,7.10 ms,7.03 ms
+Cryptographic Integrity Proofs,None,Merkle Root & Vector Commitment
+Explainable AI (XAI) Attribution,None,Full per-chunk attribution report
