@@ -847,6 +847,50 @@ with tab_integrity:
         st.caption(f"Current Merkle Root: `{audit_res['merkle_root']}`")
 
     st.divider()
+    st.subheader("🌲 Interactive Merkle Tree & Inclusion Proof Visualizer")
+    if not gate.merkle_tree.leaves:
+        st.info("The Merkle Tree is currently empty. Ingest safe documents in Tab 1 to populate the tree.")
+    else:
+        root_hash = gate.merkle_tree.get_root_hash()
+        m_col1, m_col2, m_col3 = st.columns(3)
+        with m_col1:
+            st.metric("Total Leaf Nodes", len(gate.merkle_tree.leaves))
+        with m_col2:
+            st.metric("Tree Depth", int(np.ceil(np.log2(max(len(gate.merkle_tree.leaves), 2)))) + 1)
+        with m_col3:
+            st.metric("Algorithm", "RFC 6962 SHA-256")
+
+        st.markdown(f"**Canonical Merkle Root Hash:**")
+        st.code(root_hash, language="text")
+
+        # Select a leaf document to generate cryptographic inclusion proof
+        doc_options = [f"Leaf [{i}] — {leaf.data[:50]}..." for i, leaf in enumerate(gate.merkle_tree.leaves)]
+        selected_leaf_idx = st.selectbox("Select Document Leaf to Audit Cryptographic Membership Proof:", range(len(doc_options)), format_func=lambda x: doc_options[x])
+
+        selected_leaf = gate.merkle_tree.leaves[selected_leaf_idx]
+        proof = gate.merkle_tree.generate_proof(selected_leaf_idx)
+        is_proof_valid = gate.merkle_tree.verify_proof(selected_leaf.data, proof)
+
+        st.markdown(f"#### Cryptographic Proof for Leaf #{selected_leaf_idx}")
+        st.write(f"- **Document Content:** *\"{selected_leaf.data}\"*")
+        st.write(f"- **Leaf Hash (`00:data`):** `{selected_leaf.hash}`")
+        st.write(f"- **Inclusion Proof Siblings:** `{len(proof.hashes)}` intermediate node(s) on path to root.")
+
+        sibling_rows = []
+        for s_idx, (s_hash, s_pos) in enumerate(zip(proof.hashes, proof.positions)):
+            sibling_rows.append({
+                "Step": s_idx + 1,
+                "Sibling Hash": f"{s_hash[:24]}...",
+                "Position": s_pos.upper(),
+            })
+        st.dataframe(pd.DataFrame(sibling_rows), use_container_width=True, hide_index=True)
+
+        if is_proof_valid:
+            st.success(f"✅ MERKLE INCLUSION PROOF VERIFIED: Mathematical path hashes to root `{root_hash[:16]}...` (Proof is mathematically sound and unforgeable).")
+        else:
+            st.error("❌ PROOF VERIFICATION FAILED: Sibling hash path does not reconstruct root.")
+
+    st.divider()
     st.subheader("Verifiable Audit Log History")
     log_entries = gate.audit_log.entries
     if not log_entries:
