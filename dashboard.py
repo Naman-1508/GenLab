@@ -874,21 +874,65 @@ with tab_integrity:
         st.markdown(f"#### Cryptographic Proof for Leaf #{selected_leaf_idx}")
         st.write(f"- **Document Content:** *\"{selected_leaf.data}\"*")
         st.write(f"- **Leaf Hash (`00:data`):** `{selected_leaf.hash}`")
-        st.write(f"- **Inclusion Proof Siblings:** `{len(proof.hashes)}` intermediate node(s) on path to root.")
+        st.write(f"- **Inclusion Proof Siblings:** `{len(proof.siblings)}` intermediate node(s) on path to root.")
 
-        sibling_rows = []
-        for s_idx, (s_hash, s_pos) in enumerate(zip(proof.hashes, proof.positions)):
-            sibling_rows.append({
-                "Step": s_idx + 1,
-                "Sibling Hash": f"{s_hash[:24]}...",
-                "Position": s_pos.upper(),
-            })
-        st.dataframe(pd.DataFrame(sibling_rows), use_container_width=True, hide_index=True)
+        if proof.siblings:
+            sibling_rows = []
+            for s_idx, (s_hash, s_pos) in enumerate(proof.siblings):
+                sibling_rows.append({
+                    "Step": s_idx + 1,
+                    "Sibling Hash": f"{s_hash[:24]}...",
+                    "Position": s_pos.upper(),
+                })
+            st.dataframe(pd.DataFrame(sibling_rows), use_container_width=True, hide_index=True)
+        else:
+            st.caption("ℹ️ Single leaf in tree; leaf hash directly forms the root.")
 
         if is_proof_valid:
             st.success(f"✅ MERKLE INCLUSION PROOF VERIFIED: Mathematical path hashes to root `{root_hash[:16]}...` (Proof is mathematically sound and unforgeable).")
         else:
             st.error("❌ PROOF VERIFICATION FAILED: Sibling hash path does not reconstruct root.")
+
+    # Live Anti-Tampering Demonstration for Examiners
+    st.divider()
+    st.subheader("🧪 Live Anti-Tampering Demonstration (Show to Examiner / Mam)")
+    st.markdown(
+        "Demonstrate how the Merkle Tree **instantly detects unauthorized modifications** if an attacker or insider "
+        "alters a document directly in the database without going through the pre-ingestion security gate."
+    )
+
+    if gate.knowledge_base.size() == 0:
+        st.info("Please ingest at least one safe document in Tab 1 first to test the tamper demonstration.")
+    else:
+        if "original_doc_backup" not in st.session_state:
+            st.session_state["original_doc_backup"] = None
+
+        t_col1, t_col2 = st.columns(2)
+        with t_col1:
+            if st.button("🚨 Simulate Database Tamper Attack (Alter 1 Character)", type="secondary", use_container_width=True):
+                target_doc = gate.knowledge_base.documents[0]
+                if st.session_state["original_doc_backup"] is None:
+                    st.session_state["original_doc_backup"] = target_doc.content
+                # Tamper with the document content directly
+                target_doc.content = target_doc.content + " [UNAUTHORIZED_MODIFICATION_BY_ATTACKER]"
+                st.session_state["is_tampered"] = True
+                st.rerun()
+
+        with t_col2:
+            if st.button("🟢 Restore Original Knowledge Base", type="primary", use_container_width=True):
+                if st.session_state.get("original_doc_backup") is not None:
+                    gate.knowledge_base.documents[0].content = st.session_state["original_doc_backup"]
+                    st.session_state["original_doc_backup"] = None
+                    st.session_state["is_tampered"] = False
+                    st.rerun()
+
+        if st.session_state.get("is_tampered", False):
+            st.error(
+                "🚨 **DATABASE TAMPERED!** 1 character was injected directly into the database on disk.\n\n"
+                "Now click **'Run Comprehensive Integrity Audit'** above to show how the Merkle Tree catches it!"
+            )
+        else:
+            st.caption("Database is currently intact. Click 'Simulate Database Tamper Attack' to demonstrate detection.")
 
     st.divider()
     st.subheader("Verifiable Audit Log History")
